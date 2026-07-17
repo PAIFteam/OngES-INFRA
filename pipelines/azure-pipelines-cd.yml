@@ -1,0 +1,44 @@
+trigger: none
+
+parameters:
+  - name: imageTag
+    type: string
+    default: latest
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  namespace: onges-ns
+  coreImageRepository: onges-core-api
+  workerImageRepository: onges-worker
+
+stages:
+  - stage: Deploy
+    jobs:
+      - deployment: DeployAKS
+        environment: onges-dev
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - task: AzureCLI@2
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      az aks get-credentials --resource-group "$(AKS_RESOURCE_GROUP)" --name "$(AKS_CLUSTER_NAME)" --overwrite-existing
+                      kubectl apply -f "$(Build.SourcesDirectory)/k8s/namespace.yaml"
+                      kubectl apply -f "$(Build.SourcesDirectory)/k8s/configmap.yaml"
+                      kubectl create secret generic onges-secrets --namespace "$(namespace)" --from-literal=ConnectionStrings__DefaultConnection="$(SQL_CONNECTION_STRING)" --from-literal=Security__AdminKey="$(ADMIN_KEY)" --from-literal=Security__PasswordSalt="$(PASSWORD_SALT)" --from-literal=RabbitMq__Username="$(RABBITMQ_USERNAME)" --from-literal=RabbitMq__Password="$(RABBITMQ_PASSWORD)" --dry-run=client -o yaml | kubectl apply -f -
+                      kubectl apply -f "$(Build.SourcesDirectory)/k8s/rabbitmq/"
+                      kubectl apply -f "$(Build.SourcesDirectory)/k8s/core/"
+                      kubectl apply -f "$(Build.SourcesDirectory)/k8s/worker/"
+                      kubectl apply -f "$(Build.SourcesDirectory)/k8s/ingress/"
+                      kubectl set image deployment/onges-core-api onges-core-api="$(ACR_LOGIN_SERVER)/$(coreImageRepository):${{ parameters.imageTag }}" -n "$(namespace)"
+                      kubectl set image deployment/onges-worker onges-worker="$(ACR_LOGIN_SERVER)/$(workerImageRepository):${{ parameters.imageTag }}" -n "$(namespace)"
+                      kubectl rollout status deployment/onges-core-api -n "$(namespace)" --timeout=5m
+                      kubectl rollout status deployment/onges-worker -n "$(namespace)" --timeout=5m

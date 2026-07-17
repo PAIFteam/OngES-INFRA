@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: onges-core-api
+  namespace: onges-ns
+spec:
+  type: ClusterIP
+  selector: { app: onges-core-api }
+  ports:
+    - { name: http, port: 80, targetPort: http }

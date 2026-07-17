@@ -1,0 +1,92 @@
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include:
+      - pipelines/azure-pipelines-ci.yml
+      - docker/**
+
+resources:
+  repositories:
+    - repository: ongescore
+      type: github
+      name: PAIFteam/OngES-Core
+      endpoint: PAIFteam
+      ref: refs/heads/main
+      trigger:
+        branches:
+          include: [main]
+    - repository: ongesworker
+      type: github
+      name: PAIFteam/OngES-Worker
+      endpoint: PAIFteam
+      ref: refs/heads/main
+      trigger:
+        branches:
+          include: [main]
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  buildConfiguration: Release
+  coreImageRepository: onges-core-api
+  workerImageRepository: onges-worker
+
+stages:
+  - stage: Validate
+    jobs:
+      - job: Build
+        steps:
+          - checkout: self
+            path: s/onges-infra
+          - checkout: ongescore
+            path: s/onges-core
+          - checkout: ongesworker
+            path: s/onges-worker
+          - task: UseDotNet@2
+            inputs:
+              packageType: sdk
+              version: 8.0.x
+          - bash: |
+              set -euo pipefail
+              find "$(Pipeline.Workspace)/s" -name "*.sln" -print
+              dotnet restore "$(Pipeline.Workspace)/s/onges-core/OngES-Core.sln"
+              dotnet build "$(Pipeline.Workspace)/s/onges-core/OngES-Core.sln" --configuration "$(buildConfiguration)" --no-restore
+              dotnet restore "$(Pipeline.Workspace)/s/onges-worker/OngES-Worker.sln"
+              dotnet build "$(Pipeline.Workspace)/s/onges-worker/OngES-Worker.sln" --configuration "$(buildConfiguration)" --no-restore
+            displayName: Restore e build
+
+  - stage: Container
+    dependsOn: Validate
+    jobs:
+      - job: BuildPush
+        steps:
+          - checkout: self
+            path: s/onges-infra
+          - checkout: ongescore
+            path: s/onges-core
+          - checkout: ongesworker
+            path: s/onges-worker
+          - task: Docker@2
+            inputs:
+              command: login
+              containerRegistry: $(ACR_SERVICE_CONNECTION)
+          - bash: |
+              set -euo pipefail
+              docker build -f "$(Pipeline.Workspace)/s/onges-infra/docker/core/Dockerfile" -t "$(ACR_LOGIN_SERVER)/$(coreImageRepository):$(Build.BuildId)" -t "$(ACR_LOGIN_SERVER)/$(coreImageRepository):latest" "$(Pipeline.Workspace)/s/onges-core"
+              docker build -f "$(Pipeline.Workspace)/s/onges-infra/docker/worker/Dockerfile" -t "$(ACR_LOGIN_SERVER)/$(workerImageRepository):$(Build.BuildId)" -t "$(ACR_LOGIN_SERVER)/$(workerImageRepository):latest" "$(Pipeline.Workspace)/s/onges-worker"
+            displayName: Construir imagens
+          - bash: |
+              set -euo pipefail
+              curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.58.2
+              trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed "$(ACR_LOGIN_SERVER)/$(coreImageRepository):$(Build.BuildId)"
+              trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed "$(ACR_LOGIN_SERVER)/$(workerImageRepository):$(Build.BuildId)"
+            displayName: Trivy
+          - bash: |
+              set -euo pipefail
+              docker push "$(ACR_LOGIN_SERVER)/$(coreImageRepository):$(Build.BuildId)"
+              docker push "$(ACR_LOGIN_SERVER)/$(coreImageRepository):latest"
+              docker push "$(ACR_LOGIN_SERVER)/$(workerImageRepository):$(Build.BuildId)"
+              docker push "$(ACR_LOGIN_SERVER)/$(workerImageRepository):latest"
+            displayName: Push no ACR

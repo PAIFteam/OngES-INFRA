@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onges-worker
+  namespace: onges-ns
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: onges-worker }
+  template:
+    metadata:
+      labels: { app: onges-worker }
+    spec:
+      containers:
+        - name: onges-worker
+          image: onges-worker:latest
+          envFrom:
+            - configMapRef: { name: onges-config }
+            - secretRef: { name: onges-secrets }

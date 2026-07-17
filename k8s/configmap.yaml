@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: onges-config
+  namespace: onges-ns
+data:
+  ASPNETCORE_ENVIRONMENT: Production
+  RabbitMq__HostName: rabbitmq
+  RabbitMq__Port: "5672"
