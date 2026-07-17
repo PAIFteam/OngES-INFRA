@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
         - name: onges-worker
-          image: onges-worker:latest
+          image: acrpaifgamesdev.azurecr.io/onges-worker:latest
           envFrom:
             - configMapRef: { name: onges-config }
             - secretRef: { name: onges-secrets }

@@ -32,6 +32,7 @@ variables:
   buildConfiguration: Release
   coreImageRepository: onges-core-api
   workerImageRepository: onges-worker
+  ACR_LOGIN_SERVER: acrpaifgamesdev.azurecr.io
 
 stages:
   - stage: Validate

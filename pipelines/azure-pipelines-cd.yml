@@ -12,6 +12,7 @@ variables:
   namespace: onges-ns
   coreImageRepository: onges-core-api
   workerImageRepository: onges-worker
+  ACR_LOGIN_SERVER: acrpaifgamesdev.azurecr.io
 
 stages:
   - stage: Deploy
