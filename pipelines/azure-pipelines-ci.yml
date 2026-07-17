@@ -82,6 +82,24 @@ stages:
             inputs:
               command: login
               containerRegistry: dockerpaifgames
+          # ======== BLOCO DE DIAGNÓSTICO ========
+          - bash: |
+              echo "========================================="
+              echo "Estrutura do OngES-Core"
+              echo "========================================="
+              find "$(Pipeline.Workspace)/s/onges-core" -maxdepth 4 -type f | sort
+              echo ""
+              echo "Projetos (.csproj) do OngES-Core"
+              find "$(Pipeline.Workspace)/s/onges-core" -name "*.csproj" | sort
+              echo ""
+              echo "========================================="
+              echo "Estrutura do OngES-Worker"
+              echo "========================================="
+              find "$(Pipeline.Workspace)/s/onges-worker" -maxdepth 4 -type f | sort
+              echo ""
+              echo "Projetos (.csproj) do OngES-Worker"
+              find "$(Pipeline.Workspace)/s/onges-worker" -name "*.csproj" | sort
+            displayName: Diagnóstico da estrutura dos projetos
           - bash: |
               set -euo pipefail
               docker build -f "$(Pipeline.Workspace)/s/onges-infra/docker/core/Dockerfile" -t "$(ACR_LOGIN_SERVER)/$(coreImageRepository):$(Build.BuildId)" -t "$(ACR_LOGIN_SERVER)/$(coreImageRepository):latest" "$(Pipeline.Workspace)/s/onges-core"
