@@ -50,11 +50,20 @@ stages:
               version: 8.0.x
           - bash: |
               set -euo pipefail
-              find "$(Pipeline.Workspace)/s" -name "*.sln" -print
-              dotnet restore "$(Pipeline.Workspace)/s/onges-core/OngES-Core-API.sln"
-              dotnet build "$(Pipeline.Workspace)/s/onges-core/OngES-Core-API.sln" --configuration "$(buildConfiguration)" --no-restore
-              dotnet restore "$(Pipeline.Workspace)/s/onges-worker/OngES-Worker-API.sln"
-              dotnet build "$(Pipeline.Workspace)/s/onges-worker/OngES-Worker-API.sln" --configuration "$(buildConfiguration)" --no-restore
+              CORE_SOLUTION="$(Pipeline.Workspace)/s/onges-core/src/OngES-Core-API.sln"
+              WORKER_SOLUTION="$(Pipeline.Workspace)/s/onges-worker/src/OngES-Worker-API.sln"
+              echo "Compilando Core:"
+              echo "$CORE_SOLUTION"
+              dotnet restore "$CORE_SOLUTION"
+              dotnet build "$CORE_SOLUTION" \
+                --configuration "$(buildConfiguration)" \
+                --no-restore
+              echo "Compilando Worker:"
+              echo "$WORKER_SOLUTION"
+              dotnet restore "$WORKER_SOLUTION"
+              dotnet build "$WORKER_SOLUTION" \
+                --configuration "$(buildConfiguration)" \
+                --no-restore
             displayName: Restore e build
 
   - stage: Container
