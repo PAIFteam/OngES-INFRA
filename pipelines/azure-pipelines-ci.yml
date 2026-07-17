@@ -71,7 +71,7 @@ stages:
           - task: Docker@2
             inputs:
               command: login
-              containerRegistry: $(ACR_SERVICE_CONNECTION)
+              containerRegistry: dockerpaifgames
           - bash: |
               set -euo pipefail
               docker build -f "$(Pipeline.Workspace)/s/onges-infra/docker/core/Dockerfile" -t "$(ACR_LOGIN_SERVER)/$(coreImageRepository):$(Build.BuildId)" -t "$(ACR_LOGIN_SERVER)/$(coreImageRepository):latest" "$(Pipeline.Workspace)/s/onges-core"
