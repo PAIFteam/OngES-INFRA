@@ -1,45 +1,160 @@
 trigger: none
 
-parameters:
-  - name: imageTag
-    type: string
-    default: latest
+resources:
+  pipelines:
+    - pipeline: ci
+      source: OngES - CI
+      trigger:
+        branches:
+          include:
+            - main
 
 pool:
   vmImage: ubuntu-latest
 
 variables:
+  azureServiceConnection: PAIF-Azure
+  resourceGroup: rg-paifgames-dev
+  aksClusterName: akspaifgamesdev
+
   namespace: onges-ns
+
+  acrLoginServer: acrpaifgamesdev.azurecr.io
   coreImageRepository: onges-core-api
   workerImageRepository: onges-worker
-  ACR_LOGIN_SERVER: acrpaifgamesdev.azurecr.io
 
 stages:
   - stage: Deploy
+    displayName: Deploy no AKS
+
     jobs:
-      - deployment: DeployAKS
-        environment: onges-dev
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - checkout: self
-                - task: AzureCLI@2
-                  inputs:
-                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
-                    scriptType: bash
-                    scriptLocation: inlineScript
-                    inlineScript: |
-                      set -euo pipefail
-                      az aks get-credentials --resource-group "$(AKS_RESOURCE_GROUP)" --name "$(AKS_CLUSTER_NAME)" --overwrite-existing
-                      kubectl apply -f "$(Build.SourcesDirectory)/k8s/namespace.yaml"
-                      kubectl apply -f "$(Build.SourcesDirectory)/k8s/configmap.yaml"
-                      kubectl create secret generic onges-secrets --namespace "$(namespace)" --from-literal=ConnectionStrings__DefaultConnection="$(SQL_CONNECTION_STRING)" --from-literal=Security__AdminKey="$(ADMIN_KEY)" --from-literal=Security__PasswordSalt="$(PASSWORD_SALT)" --from-literal=RabbitMq__Username="$(RABBITMQ_USERNAME)" --from-literal=RabbitMq__Password="$(RABBITMQ_PASSWORD)" --dry-run=client -o yaml | kubectl apply -f -
-                      kubectl apply -f "$(Build.SourcesDirectory)/k8s/rabbitmq/"
-                      kubectl apply -f "$(Build.SourcesDirectory)/k8s/core/"
-                      kubectl apply -f "$(Build.SourcesDirectory)/k8s/worker/"
-                      kubectl apply -f "$(Build.SourcesDirectory)/k8s/ingress/"
-                      kubectl set image deployment/onges-core-api onges-core-api="$(ACR_LOGIN_SERVER)/$(coreImageRepository):${{ parameters.imageTag }}" -n "$(namespace)"
-                      kubectl set image deployment/onges-worker onges-worker="$(ACR_LOGIN_SERVER)/$(workerImageRepository):${{ parameters.imageTag }}" -n "$(namespace)"
-                      kubectl rollout status deployment/onges-core-api -n "$(namespace)" --timeout=5m
-                      kubectl rollout status deployment/onges-worker -n "$(namespace)" --timeout=5m
+      - job: DeployAKS
+        displayName: Aplicar manifests e atualizar imagens
+
+        steps:
+          - checkout: self
+            path: s/onges-infra
+
+          - task: AzureCLI@2
+            displayName: Conectar ao AKS
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+
+                az aks get-credentials \
+                  --resource-group "$(resourceGroup)" \
+                  --name "$(aksClusterName)" \
+                  --overwrite-existing
+
+                kubectl cluster-info
+                kubectl get nodes
+
+          - bash: |
+              set -euo pipefail
+
+              echo "Build do CI que iniciou este deploy:"
+              echo "$(resources.pipeline.ci.runID)"
+
+              echo "Branch:"
+              echo "$(resources.pipeline.ci.sourceBranch)"
+
+              echo "Commit:"
+              echo "$(resources.pipeline.ci.sourceCommit)"
+            displayName: Exibir informações do CI
+
+          - bash: |
+              set -euo pipefail
+
+              INFRA_PATH="$(Pipeline.Workspace)/s/onges-infra"
+
+              echo "Aplicando namespace..."
+              kubectl apply \
+                -f "$INFRA_PATH/k8s/namespace.yaml"
+
+              echo "Aplicando ConfigMap..."
+              kubectl apply \
+                -f "$INFRA_PATH/k8s/configmap.yaml"
+
+              echo "Aplicando RabbitMQ..."
+              kubectl apply \
+                -f "$INFRA_PATH/k8s/rabbitmq/"
+
+              echo "Aplicando Core..."
+              kubectl apply \
+                -f "$INFRA_PATH/k8s/core/"
+
+              echo "Aplicando Worker..."
+              kubectl apply \
+                -f "$INFRA_PATH/k8s/worker/"
+
+              echo "Aplicando Ingress..."
+              kubectl apply \
+                -f "$INFRA_PATH/k8s/ingress/"
+            displayName: Aplicar manifests Kubernetes
+
+          - bash: |
+              set -euo pipefail
+
+              IMAGE_TAG="$(resources.pipeline.ci.runID)"
+
+              CORE_IMAGE="$(acrLoginServer)/$(coreImageRepository):$IMAGE_TAG"
+              WORKER_IMAGE="$(acrLoginServer)/$(workerImageRepository):$IMAGE_TAG"
+
+              echo "Imagem do Core:"
+              echo "$CORE_IMAGE"
+
+              echo "Imagem do Worker:"
+              echo "$WORKER_IMAGE"
+
+              kubectl set image \
+                deployment/onges-core-api \
+                onges-core-api="$CORE_IMAGE" \
+                --namespace "$(namespace)"
+
+              kubectl set image \
+                deployment/onges-worker \
+                onges-worker="$WORKER_IMAGE" \
+                --namespace "$(namespace)"
+            displayName: Atualizar imagens dos deployments
+
+          - bash: |
+              set -euo pipefail
+
+              kubectl rollout status \
+                deployment/onges-core-api \
+                --namespace "$(namespace)" \
+                --timeout=300s
+
+              kubectl rollout status \
+                deployment/onges-worker \
+                --namespace "$(namespace)" \
+                --timeout=300s
+            displayName: Aguardar rollout
+
+          - bash: |
+              set -euo pipefail
+
+              echo "Pods:"
+              kubectl get pods \
+                --namespace "$(namespace)" \
+                -o wide
+
+              echo ""
+              echo "Services:"
+              kubectl get services \
+                --namespace "$(namespace)"
+
+              echo ""
+              echo "Ingress:"
+              kubectl get ingress \
+                --namespace "$(namespace)"
+
+              echo ""
+              echo "Imagens implantadas:"
+              kubectl get deployments \
+                --namespace "$(namespace)" \
+                -o custom-columns="DEPLOYMENT:.metadata.name,IMAGE:.spec.template.spec.containers[*].image"
+            displayName: Exibir resultado do deploy
