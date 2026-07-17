@@ -107,9 +107,27 @@ stages:
             displayName: Construir imagens
           - bash: |
               set -euo pipefail
-              curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.58.2
-              trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed "$(ACR_LOGIN_SERVER)/$(coreImageRepository):$(Build.BuildId)"
-              trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed "$(ACR_LOGIN_SERVER)/$(workerImageRepository):$(Build.BuildId)"
+              TRIVY_INSTALL_DIR="$(Agent.TempDirectory)/trivy-bin"
+              echo "Criando diretório do Trivy:"
+              echo "$TRIVY_INSTALL_DIR"
+              mkdir -p "$TRIVY_INSTALL_DIR"
+              echo "Instalando Trivy..."
+              curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+              | sh -s -- -b "$TRIVY_INSTALL_DIR" v0.58.2
+              echo "Validando instalação..."
+              "$TRIVY_INSTALL_DIR/trivy" --version
+              echo "Analisando imagem do Core..."
+              "$TRIVY_INSTALL_DIR/trivy" image \
+              --exit-code 1 \
+              --severity HIGH,CRITICAL \
+              --ignore-unfixed \
+              "$(ACR_LOGIN_SERVER)/$(coreImageRepository):$(Build.BuildId)"
+              echo "Analisando imagem do Worker..."
+              "$TRIVY_INSTALL_DIR/trivy" image \
+              --exit-code 1 \
+              --severity HIGH,CRITICAL \
+              --ignore-unfixed \
+              "$(ACR_LOGIN_SERVER)/$(workerImageRepository):$(Build.BuildId)"
             displayName: Trivy
           - bash: |
               set -euo pipefail
