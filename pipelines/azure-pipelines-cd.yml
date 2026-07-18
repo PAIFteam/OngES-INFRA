@@ -13,15 +13,28 @@ pool:
   vmImage: ubuntu-latest
 
 variables:
-  azureServiceConnection: k8spaifgames
-  resourceGroup: rg-paifgames-dev
-  aksClusterName: akspaifgamesdev
+  - group: onges-dev
 
-  namespace: onges-ns
+  - name: azureServiceConnection
+    value: k8spaifgames
 
-  acrLoginServer: acrpaifgamesdev.azurecr.io
-  coreImageRepository: onges-core-api
-  workerImageRepository: onges-worker
+  - name: resourceGroup
+    value: rg-paifgames-dev
+
+  - name: aksClusterName
+    value: akspaifgamesdev
+
+  - name: namespace
+    value: onges-ns
+
+  - name: acrLoginServer
+    value: acrpaifgamesdev.azurecr.io
+
+  - name: coreImageRepository
+    value: onges-core-api
+
+  - name: workerImageRepository
+    value: onges-worker
 
 stages:
   - stage: Deploy
@@ -81,6 +94,28 @@ stages:
               echo "Aplicando RabbitMQ..."
               kubectl apply \
                 -f "$INFRA_PATH/k8s/rabbitmq/"
+            displayName: Aplicar recursos base do Kubernetes
+
+          - bash: |
+              set -euo pipefail
+
+              echo "Criando ou atualizando o Secret onges-secrets..."
+
+              kubectl create secret generic onges-secrets \
+                --namespace "$(namespace)" \
+                --from-literal=ConnectionStrings__DefaultConnection="$(ONGES_DB_CONNECTION)" \
+                --from-literal=RabbitMq__Host="$(ONGES_RABBITMQ_HOST)" \
+                --from-literal=RabbitMq__User="$(ONGES_RABBITMQ_USER)" \
+                --from-literal=RabbitMq__Password="$(ONGES_RABBITMQ_PASSWORD)" \
+                --dry-run=client \
+                -o yaml \
+                | kubectl apply -f -
+            displayName: Criar ou atualizar Secret
+
+          - bash: |
+              set -euo pipefail
+
+              INFRA_PATH="$(Pipeline.Workspace)/s/onges-infra"
 
               echo "Aplicando Core..."
               kubectl apply \
@@ -93,7 +128,7 @@ stages:
               echo "Aplicando Ingress..."
               kubectl apply \
                 -f "$INFRA_PATH/k8s/ingress/"
-            displayName: Aplicar manifests Kubernetes
+            displayName: Aplicar aplicações Kubernetes
 
           - bash: |
               set -euo pipefail
@@ -126,12 +161,12 @@ stages:
               kubectl rollout status \
                 deployment/onges-core-api \
                 --namespace "$(namespace)" \
-                --timeout=300s
+                --timeout=600s
 
               kubectl rollout status \
                 deployment/onges-worker \
                 --namespace "$(namespace)" \
-                --timeout=300s
+                --timeout=600s
             displayName: Aguardar rollout
 
           - bash: |
