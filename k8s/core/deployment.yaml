@@ -4,7 +4,7 @@ metadata:
   name: onges-core-api
   namespace: onges-ns
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels: { app: onges-core-api }
   template:
