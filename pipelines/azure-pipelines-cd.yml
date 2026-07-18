@@ -105,7 +105,7 @@ stages:
                 --namespace "$(namespace)" \
                 --from-literal=ConnectionStrings__DefaultConnection="$(ONGES_DB_CONNECTION)" \
                 --from-literal=RabbitMq__Host="$(ONGES_RABBITMQ_HOST)" \
-                --from-literal=RabbitMq__User="$(ONGES_RABBITMQ_USER)" \
+                --from-literal=RabbitMq__Username="$(ONGES_RABBITMQ_USER)" \
                 --from-literal=RabbitMq__Password="$(ONGES_RABBITMQ_PASSWORD)" \
                 --dry-run=client \
                 -o yaml \
